@@ -3,7 +3,7 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #121417;
+  background: #0A0A0A;
   color: #f0f0f0;
   min-height: 100vh;
   display: flex;
@@ -16,44 +16,81 @@ body {
 .hidden { display: none !important; }
 
 .card {
-  background: #1c1f24;
-  border-radius: 16px;
-  padding: 32px;
+  background: #1C1C1C;
+  border: 1px solid #2A2A2A;
+  border-radius: 20px;
+  padding: 36px 32px;
   text-align: center;
 }
 
-h1 { font-size: 32px; margin: 0 0 12px; }
-h2 { font-size: 24px; margin: 0 0 20px; }
-h3 { font-size: 16px; margin: 24px 0 8px; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; }
+h1 {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+h1 .accent { color: #FC4C02; }
 
-.subtitle { color: #bbb; line-height: 1.5; margin-bottom: 20px; }
+h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+h3 {
+  font-size: 12px;
+  font-weight: 800;
+  margin: 24px 0 10px;
+  color: #FC4C02;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.badge {
+  display: inline-block;
+  background: rgba(252, 76, 2, 0.15);
+  color: #FC4C02;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+.subtitle { color: #9A9A9A; line-height: 1.5; margin-bottom: 20px; font-size: 15px; }
 
 .notes {
   text-align: left;
-  color: #999;
-  font-size: 14px;
-  line-height: 1.6;
-  margin-bottom: 24px;
+  color: #9A9A9A;
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 26px;
   padding-left: 20px;
 }
 
 .btn-primary, .btn-secondary {
   border: none;
-  border-radius: 10px;
-  padding: 14px 28px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 12px;
+  padding: 16px 28px;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
   cursor: pointer;
   width: 100%;
 }
 
-.btn-primary { background: #4f7cff; color: white; }
-.btn-primary:hover { background: #3d68f0; }
+.btn-primary { background: #FC4C02; color: #fff; }
+.btn-primary:hover { background: #d94002; }
 
-.btn-secondary { background: #333; color: white; margin-top: 16px; }
-.btn-secondary:hover { background: #444; }
+.btn-secondary { background: #2A2A2A; color: #fff; margin-top: 16px; border: 1px solid #3a3a3a; }
+.btn-secondary:hover { background: #333; }
 
-.error-text { color: #ff6b6b; margin-top: 12px; font-size: 14px; }
+.error-text { color: #FF3B30; margin-top: 12px; font-size: 14px; }
 
 /* Session screen */
 .video-wrap {
@@ -90,10 +127,10 @@ h3 { font-size: 16px; margin: 24px 0 8px; color: #aaa; text-transform: uppercase
   min-width: 70px;
 }
 
-.hud-value { display: block; font-size: 18px; font-weight: 700; }
-.hud-label { display: block; font-size: 10px; color: #ccc; text-transform: uppercase; letter-spacing: 0.05em; }
+.hud-value { display: block; font-size: 18px; font-weight: 900; color: #FC4C02; }
+.hud-label { display: block; font-size: 9px; color: #ccc; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-top: 2px; }
 
-.status-text { text-align: center; color: #999; margin: 16px 0; }
+.status-text { text-align: center; color: #9A9A9A; margin: 16px 0; font-size: 13px; font-weight: 600; }
 
 /* Results screen */
 .stat-row {
@@ -106,21 +143,24 @@ h3 { font-size: 16px; margin: 24px 0 8px; color: #aaa; text-transform: uppercase
 
 .stat-box {
   background: #262a31;
-  border-radius: 10px;
-  padding: 14px;
+  border: 1px solid #333;
+  border-radius: 14px;
+  padding: 16px;
   flex: 1;
   min-width: 110px;
 }
 
-.stat-value { display: block; font-size: 20px; font-weight: 700; }
-.stat-label { display: block; font-size: 11px; color: #999; margin-top: 4px; }
+.stat-value { display: block; font-size: 24px; font-weight: 900; color: #fff; }
+.stat-label { display: block; font-size: 10px; color: #9A9A9A; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
 
 .feedback-text {
   text-align: left;
-  line-height: 1.6;
+  line-height: 1.7;
   color: #ddd;
   background: #262a31;
-  border-radius: 10px;
-  padding: 16px;
+  border: 1px solid #333;
+  border-radius: 14px;
+  padding: 18px;
   white-space: pre-wrap;
+  font-size: 14px;
 }
