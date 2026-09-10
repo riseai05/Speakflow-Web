@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SpeakFlow — Presence & Focus Coach</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- LANDING SCREEN -->
+  <section id="landing" class="screen">
+    <div class="card">
+      <h1>SpeakFlow</h1>
+      <p class="subtitle">Practice a speech, pitch, or interview answer. We'll track your eye contact, blink rate, and posture, then give you written feedback.</p>
+      <ul class="notes">
+        <li>Uses your webcam — nothing is recorded or uploaded, only small numeric stats are sent for feedback.</li>
+        <li>Find a well-lit spot and face your camera directly.</li>
+        <li>Sessions run up to 2 minutes, or stop anytime.</li>
+      </ul>
+      <button id="startBtn" class="btn-primary">Start Session</button>
+      <p id="landingError" class="error-text"></p>
+    </div>
+  </section>
+
+  <!-- SESSION SCREEN -->
+  <section id="session" class="screen hidden">
+    <div class="video-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div class="hud">
+        <div class="hud-item">
+          <span class="hud-value" id="timerValue">0:00</span>
+          <span class="hud-label">Time</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-value" id="blinkValue">0</span>
+          <span class="hud-label">Blinks</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-value" id="gazeValue">--</span>
+          <span class="hud-label">Gaze</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-value" id="postureValue">--</span>
+          <span class="hud-label">Posture</span>
+        </div>
+      </div>
+    </div>
+    <p id="sessionStatus" class="status-text">Loading face tracking model…</p>
+    <button id="stopBtn" class="btn-secondary hidden">Stop Session</button>
+  </section>
+
+  <!-- RESULTS SCREEN -->
+  <section id="results" class="screen hidden">
+    <div class="card">
+      <h2>Session Summary</h2>
+      <div class="stat-row">
+        <div class="stat-box">
+          <span class="stat-value" id="resDuration">--</span>
+          <span class="stat-label">Duration</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="resBlinkRate">--</span>
+          <span class="stat-label">Blinks / min</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="resGaze">--</span>
+          <span class="stat-label">Gaze Stability</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="resPosture">--</span>
+          <span class="stat-label">Posture Stability</span>
+        </div>
+      </div>
+
+      <h3>AI Feedback</h3>
+      <p id="feedbackText" class="feedback-text">Generating feedback…</p>
+
+      <button id="restartBtn" class="btn-primary">Practice Again</button>
+    </div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
