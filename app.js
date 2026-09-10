@@ -102,16 +102,26 @@ async function startSession() {
   eyesCurrentlyClosed = false;
   gazeSamples = [];
   headAngleSamples = [];
+  framesWaitedForReadiness = 0;
   sessionStartMs = performance.now();
 
   sessionStatus.textContent = "Tracking your face — look at the camera and speak naturally.";
   stopBtn.classList.remove("hidden");
 
-  video.addEventListener("loadeddata", () => {
-    overlay.width = video.videoWidth;
-    overlay.height = video.videoHeight;
-    detectFrame();
-  }, { once: true });
+  // Start the detection loop directly rather than waiting on the video's
+  // 'loadeddata' event — that event doesn't reliably fire on every browser
+  // or every repeat session, which was silently preventing tracking from
+  // ever starting (timer kept running since it's on a separate clock).
+  // detectFrame() has its own readiness check and will retry itself via
+  // requestAnimationFrame until the video is actually ready.
+  const setOverlaySize = () => {
+    overlay.width = video.videoWidth || 640;
+    overlay.height = video.videoHeight || 480;
+  };
+  setOverlaySize();
+  video.addEventListener("loadedmetadata", setOverlaySize);
+
+  detectFrame();
 
   timerIntervalId = setInterval(updateTimerDisplay, 250);
 }
@@ -128,11 +138,22 @@ function updateTimerDisplay() {
 }
 
 // ---- Per-frame detection loop ----
+let framesWaitedForReadiness = 0;
+
 function detectFrame() {
   if (!faceLandmarker || video.readyState < 2) {
+    framesWaitedForReadiness += 1;
+    if (framesWaitedForReadiness > 300) {
+      // ~5s at 60fps with nothing ready — something's actually wrong,
+      // not just a normal brief startup delay.
+      sessionStatus.textContent =
+        "Camera feed isn't ready. Try stopping and starting again, or reload the page.";
+      return;
+    }
     rafId = requestAnimationFrame(detectFrame);
     return;
   }
+  framesWaitedForReadiness = 0;
 
   const result = faceLandmarker.detectForVideo(video, performance.now());
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
