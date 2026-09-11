@@ -183,6 +183,13 @@ function detectFrame() {
     processGaze(blendshapes);
     processHeadAngle(landmarks);
     drawSimpleOverlay(landmarks);
+    sessionStatus.textContent = "Tracking your face — look at the camera and speak naturally.";
+  } else {
+    // No face found this frame — don't leave stale numbers on screen
+    // implying tracking is still happening. Blank the metrics and say so.
+    animateValueUpdate(gazeValueEl, "--");
+    animateValueUpdate(postureValueEl, "--");
+    sessionStatus.textContent = "No face detected — please face the camera.";
   }
 
   rafId = requestAnimationFrame(detectFrame);
