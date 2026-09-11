@@ -45,7 +45,23 @@ let headAngleSamples = []; // { yaw, pitch, roll } per frame, degrees-ish
 
 function showScreen(name) {
   Object.values(screens).forEach((el) => el.classList.add("hidden"));
-  screens[name].classList.remove("hidden");
+  const target = screens[name];
+  target.classList.remove("hidden");
+  // Re-trigger the CSS enter animation each time, since these are
+  // persistent DOM nodes rather than freshly mounted elements.
+  const inner = target.querySelector(".screen-inner");
+  if (inner) {
+    inner.style.animation = "none";
+    void inner.offsetWidth; // force reflow
+    inner.style.animation = "";
+  }
+}
+
+function animateValueUpdate(el, text) {
+  if (el.textContent === text) return;
+  el.style.opacity = "0";
+  el.textContent = text;
+  requestAnimationFrame(() => { el.style.opacity = "1"; });
 }
 
 // ---- Load the face landmarker model (once) ----
@@ -100,6 +116,7 @@ async function startSession() {
   // Reset session data
   blinkCount = 0;
   eyesCurrentlyClosed = false;
+  lastBlinkTimestamp = 0;
   gazeSamples = [];
   headAngleSamples = [];
   framesWaitedForReadiness = 0;
@@ -176,6 +193,9 @@ function getBlendshapeScore(categories, name) {
   return found ? found.score : 0;
 }
 
+const BLINK_MIN_INTERVAL_MS = 350; // real blinks rarely repeat faster than this
+let lastBlinkTimestamp = 0;
+
 function processBlink(blendshapes) {
   const left = getBlendshapeScore(blendshapes, "eyeBlinkLeft");
   const right = getBlendshapeScore(blendshapes, "eyeBlinkRight");
@@ -183,8 +203,12 @@ function processBlink(blendshapes) {
 
   if (avgBlink > BLINK_THRESHOLD && !eyesCurrentlyClosed) {
     eyesCurrentlyClosed = true;
-    blinkCount += 1;
-    blinkValueEl.textContent = String(blinkCount);
+    const now = performance.now();
+    if (now - lastBlinkTimestamp > BLINK_MIN_INTERVAL_MS) {
+      lastBlinkTimestamp = now;
+      blinkCount += 1;
+      animateValueUpdate(blinkValueEl, String(blinkCount));
+    }
   } else if (avgBlink <= BLINK_THRESHOLD && eyesCurrentlyClosed) {
     eyesCurrentlyClosed = false;
   }
@@ -204,7 +228,7 @@ function processGaze(blendshapes) {
 
   // Show a live rolling gaze indicator
   const recentAvg = average(gazeSamples.slice(-30));
-  gazeValueEl.textContent = recentAvg < 0.25 ? "Steady" : recentAvg < 0.5 ? "Drifting" : "Away";
+  animateValueUpdate(gazeValueEl, recentAvg < 0.25 ? "Steady" : recentAvg < 0.5 ? "Drifting" : "Away");
 }
 
 function processHeadAngle(landmarks) {
@@ -227,7 +251,7 @@ function processHeadAngle(landmarks) {
 
   const recent = headAngleSamples.slice(-30);
   const tiltVariance = variance(recent.map((h) => h.roll)) + variance(recent.map((h) => h.yaw));
-  postureValueEl.textContent = tiltVariance < 15 ? "Stable" : tiltVariance < 40 ? "Shifting" : "Restless";
+  animateValueUpdate(postureValueEl, tiltVariance < 15 ? "Stable" : tiltVariance < 40 ? "Shifting" : "Restless");
 }
 
 function drawSimpleOverlay(landmarks) {
@@ -288,11 +312,34 @@ async function endSession() {
 
 function showResults(summary) {
   showScreen("results");
+
+  // Composite "Presence Score" — the one hero number, per the redesign.
+  // Blink rate is scored by closeness to a relaxed resting rate (~18/min);
+  // far above or below that (rushed, or barely blinking at all) scores lower.
+  const blinkRateScore = Math.max(0, 100 - Math.abs(summary.blinkRatePerMin - 18) * 4);
+  const presenceScore = Math.round(
+    summary.gazeStabilityScore * 0.4 + summary.postureStabilityScore * 0.35 + blinkRateScore * 0.25
+  );
+
+  const ringCircumference = 377;
+  const ringProgress = document.getElementById("ringProgress");
+  ringProgress.style.strokeDashoffset = String(ringCircumference);
+  // Delay so the transition actually animates from full-empty to the score,
+  // rather than snapping straight there.
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      ringProgress.style.strokeDashoffset = String(
+        ringCircumference * (1 - presenceScore / 100)
+      );
+    }, 50);
+  });
+  document.getElementById("presenceScoreValue").textContent = String(presenceScore);
+
   document.getElementById("resDuration").textContent = `${summary.durationSec}s`;
   document.getElementById("resBlinkRate").textContent = summary.blinkRatePerMin;
   document.getElementById("resGaze").textContent = `${summary.gazeStabilityScore}%`;
   document.getElementById("resPosture").textContent = `${summary.postureStabilityScore}%`;
-  document.getElementById("feedbackText").textContent = "Generating feedback…";
+  document.getElementById("feedbackText").textContent = "Thinking it over…";
 }
 
 async function fetchAiFeedback(summary) {

@@ -10,12 +10,11 @@
 
   <!-- LANDING SCREEN -->
   <section id="landing" class="screen">
-    <div class="card">
-      <span class="badge">Presence Training</span>
-      <h1>Speak<span class="accent">Flow</span></h1>
-      <p class="subtitle">Train your presence like an athlete trains their body. We track your eye contact, blink rate, and posture — live — then give you real feedback.</p>
+    <div class="screen-inner card">
+      <h1>SpeakFlow</h1>
+      <p class="subtitle">Practice a speech, pitch, or interview answer. We'll quietly track your eye contact, blink rate, and posture, then share a few thoughts afterward.</p>
       <ul class="notes">
-        <li>Uses your webcam — nothing is recorded or uploaded, only small numeric stats are sent for feedback.</li>
+        <li>Nothing is recorded or uploaded — only small numeric stats are used for feedback.</li>
         <li>Find a well-lit spot and face your camera directly.</li>
         <li>Sessions run up to 2 minutes, or stop anytime.</li>
       </ul>
@@ -26,58 +25,76 @@
 
   <!-- SESSION SCREEN -->
   <section id="session" class="screen hidden">
-    <div class="video-wrap">
-      <video id="video" autoplay playsinline muted></video>
-      <canvas id="overlay"></canvas>
-      <div class="hud">
-        <div class="hud-item">
-          <span class="hud-value" id="timerValue">0:00</span>
-          <span class="hud-label">Time</span>
-        </div>
-        <div class="hud-item">
-          <span class="hud-value" id="blinkValue">0</span>
-          <span class="hud-label">Blinks</span>
-        </div>
-        <div class="hud-item">
-          <span class="hud-value" id="gazeValue">--</span>
-          <span class="hud-label">Gaze</span>
-        </div>
-        <div class="hud-item">
-          <span class="hud-value" id="postureValue">--</span>
-          <span class="hud-label">Posture</span>
+    <div class="screen-inner">
+      <div class="video-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="hud">
+          <div class="hud-item">
+            <span class="hud-value" id="timerValue">0:00</span>
+            <span class="hud-label">Time</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-value" id="blinkValue">0</span>
+            <span class="hud-label">Blinks</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-value" id="gazeValue">--</span>
+            <span class="hud-label">Gaze</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-value" id="postureValue">--</span>
+            <span class="hud-label">Posture</span>
+          </div>
         </div>
       </div>
+      <p id="sessionStatus" class="status-text">Loading face tracking model…</p>
+      <button id="stopBtn" class="btn-secondary hidden">Stop Session</button>
     </div>
-    <p id="sessionStatus" class="status-text">Loading face tracking model…</p>
-    <button id="stopBtn" class="btn-secondary hidden">Stop Session</button>
   </section>
 
   <!-- RESULTS SCREEN -->
   <section id="results" class="screen hidden">
-    <div class="card">
-      <span class="badge">Session Complete</span>
-      <h2>Your Results</h2>
-      <div class="stat-row">
-        <div class="stat-box">
-          <span class="stat-value" id="resDuration">--</span>
-          <span class="stat-label">Duration</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="resBlinkRate">--</span>
-          <span class="stat-label">Blinks / min</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="resGaze">--</span>
-          <span class="stat-label">Gaze Stability</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="resPosture">--</span>
-          <span class="stat-label">Posture Stability</span>
+    <div class="screen-inner card">
+      <h2>Session Complete</h2>
+
+      <div class="score-ring-wrap">
+        <svg class="score-ring" viewBox="0 0 140 140">
+          <circle class="ring-track" cx="70" cy="70" r="60" />
+          <circle class="ring-progress" id="ringProgress" cx="70" cy="70" r="60" />
+        </svg>
+        <div class="score-center">
+          <span class="score-value" id="presenceScoreValue">--</span>
+          <span class="score-label">Presence</span>
         </div>
       </div>
 
-      <h3>Coach Feedback</h3>
-      <p id="feedbackText" class="feedback-text">Generating feedback…</p>
+      <div class="stat-list">
+        <div class="stat-row">
+          <span class="stat-row-label">Duration</span>
+          <span class="stat-row-value" id="resDuration">--</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-row-label">Blinks / min</span>
+          <span class="stat-row-value" id="resBlinkRate">--</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-row-label">Gaze stability</span>
+          <span class="stat-row-value" id="resGaze">--</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-row-label">Posture stability</span>
+          <span class="stat-row-value" id="resPosture">--</span>
+        </div>
+      </div>
+
+      <div class="feedback-card">
+        <span class="feedback-icon">◆</span>
+        <div class="feedback-body">
+          <span class="feedback-title">Coach's Note</span>
+          <p id="feedbackText" class="feedback-text">Thinking it over…</p>
+        </div>
+      </div>
 
       <button id="restartBtn" class="btn-primary">Train Again</button>
     </div>
