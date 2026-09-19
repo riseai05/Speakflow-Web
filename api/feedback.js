@@ -30,7 +30,7 @@ module.exports = async function handler(req, res) {
 Rules you must follow:
 - Reference the specific numbers above directly — never give generic advice that could apply to anyone.
 ${isShortSession ? "- This session was very short (under 25 seconds) — explicitly acknowledge the sample is too small to draw a strong conclusion, rather than inventing confident feedback from thin data.\n" : ""}${extremeMetrics ? "- One or more scores hit an extreme (0 or 100) — flag that this likely reflects a measurement edge case or very brief/unusual sample, not necessarily a real pattern.\n" : ""}- Frame feedback around what these signals typically mean in an interview context. For example: gaze instability late in an answer often maps to losing confidence or running out of prepared points. Rigid, completely unchanging posture the whole time isn't necessarily good either — it can read as tense rather than composed.
-- Keep it to 3-4 sentences total: one specific observation tied to their numbers, one likely interpretation of what that signal suggests in an interview context, one concrete suggestion for next time.
+- Keep it to 3-4 complete sentences total: one specific observation tied to their numbers, one likely interpretation of what that signal suggests in an interview context, one concrete suggestion for next time. Make sure your response ends with a complete sentence — do not cut off mid-thought.
 - Never use stock phrases like "make more eye contact" or "sit up straight" without tying them directly to the numbers above.
 - Plain text only, no markdown formatting.`;
 
@@ -42,14 +42,31 @@ ${isShortSession ? "- This session was very short (under 25 seconds) — explici
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 400 },
+          generationConfig: {
+            maxOutputTokens: 600,
+            // Newer Gemini models spend part of maxOutputTokens on hidden
+            // "thinking" tokens before writing the visible answer. Without
+            // capping that, a short visible response can get cut off even
+            // with a generous token limit. Keeping thinking minimal leaves
+            // the budget for the actual written feedback.
+            thinkingConfig: { thinkingLevel: "low" },
+          },
         }),
       }
     );
     const geminiJson = await geminiRes.json();
 
+    // Log the full response (truncated) so real failures are diagnosable
+    // from Vercel's function logs without needing browser devtools.
+    console.log("Gemini raw response:", JSON.stringify(geminiJson).slice(0, 1500));
+
+    const finishReason = geminiJson.candidates?.[0]?.finishReason;
+    if (finishReason && finishReason !== "STOP") {
+      console.warn(`Gemini finishReason was "${finishReason}", not STOP.`);
+    }
+
     if (!geminiRes.ok) {
-      console.error("Gemini API error:", JSON.stringify(geminiJson));
+      console.error("Gemini API error (non-OK status):", JSON.stringify(geminiJson));
       res.status(200).json({
         feedback: "Coach feedback isn't available right now, but your session stats above are accurate — try again shortly.",
       });
@@ -60,8 +77,9 @@ ${isShortSession ? "- This session was very short (under 25 seconds) — explici
       geminiJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
       "Your session data looked reasonable, but we couldn't generate written feedback this time — try again in a moment.";
 
-    res.status(200).json({ feedback });
+    res.status(200).json({ feedback, _finishReason: finishReason });
   } catch (err) {
+    console.error("Failed to reach Gemini:", String(err));
     res.status(500).json({ error: "Failed to reach Gemini", detail: String(err) });
   }
 };

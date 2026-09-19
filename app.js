@@ -9,9 +9,10 @@ import {
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
 const MAX_SESSION_SECONDS = 120;
-const BLINK_THRESHOLD = 0.5; // blendshape score above which an eye counts as "closed"
+const BLINK_THRESHOLD = 0.5;
+const BLINK_MIN_INTERVAL_MS = 350;
+const NO_FACE_SUSTAINED_THRESHOLD = 8; // consecutive frames before we call it sustained, not a blip
 
-// ---- DOM references ----
 const screens = {
   landing: document.getElementById("landing"),
   session: document.getElementById("session"),
@@ -31,7 +32,6 @@ const blinkValueEl = document.getElementById("blinkValue");
 const gazeValueEl = document.getElementById("gazeValue");
 const postureValueEl = document.getElementById("postureValue");
 
-// ---- Session state ----
 let faceLandmarker = null;
 let stream = null;
 let rafId = null;
@@ -40,19 +40,22 @@ let timerIntervalId = null;
 
 let blinkCount = 0;
 let eyesCurrentlyClosed = false;
-let gazeSamples = []; // 0-1 deviation-from-center per frame
-let headAngleSamples = []; // { yaw, pitch, roll } per frame, degrees-ish
+let lastBlinkTimestamp = 0;
+let gazeSamples = [];
+let headAngleSamples = [];
+let consecutiveNoFaceFrames = 0;
+let faceDetectedDurationMs = 0; // only time a real face was actually seen
+let lastFrameTimestamp = 0;
+let framesWaitedForReadiness = 0;
 
 function showScreen(name) {
   Object.values(screens).forEach((el) => el.classList.add("hidden"));
   const target = screens[name];
   target.classList.remove("hidden");
-  // Re-trigger the CSS enter animation each time, since these are
-  // persistent DOM nodes rather than freshly mounted elements.
   const inner = target.querySelector(".screen-inner");
   if (inner) {
     inner.style.animation = "none";
-    void inner.offsetWidth; // force reflow
+    void inner.offsetWidth;
     inner.style.animation = "";
   }
 }
@@ -64,7 +67,6 @@ function animateValueUpdate(el, text) {
   requestAnimationFrame(() => { el.style.opacity = "1"; });
 }
 
-// ---- Load the face landmarker model (once) ----
 async function loadFaceLandmarker() {
   const filesetResolver = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
@@ -82,7 +84,6 @@ async function loadFaceLandmarker() {
   });
 }
 
-// ---- Start a session ----
 async function startSession() {
   landingError.textContent = "";
   startBtn.disabled = true;
@@ -113,24 +114,20 @@ async function startSession() {
     }
   }
 
-  // Reset session data
   blinkCount = 0;
   eyesCurrentlyClosed = false;
   lastBlinkTimestamp = 0;
   gazeSamples = [];
   headAngleSamples = [];
+  consecutiveNoFaceFrames = 0;
+  faceDetectedDurationMs = 0;
+  lastFrameTimestamp = 0;
   framesWaitedForReadiness = 0;
   sessionStartMs = performance.now();
 
   sessionStatus.textContent = "Tracking your face — look at the camera and speak naturally.";
   stopBtn.classList.remove("hidden");
 
-  // Start the detection loop directly rather than waiting on the video's
-  // 'loadeddata' event — that event doesn't reliably fire on every browser
-  // or every repeat session, which was silently preventing tracking from
-  // ever starting (timer kept running since it's on a separate clock).
-  // detectFrame() has its own readiness check and will retry itself via
-  // requestAnimationFrame until the video is actually ready.
   const setOverlaySize = () => {
     overlay.width = video.videoWidth || 640;
     overlay.height = video.videoHeight || 480;
@@ -154,15 +151,10 @@ function updateTimerDisplay() {
   }
 }
 
-// ---- Per-frame detection loop ----
-let framesWaitedForReadiness = 0;
-
 function detectFrame() {
   if (!faceLandmarker || video.readyState < 2) {
     framesWaitedForReadiness += 1;
     if (framesWaitedForReadiness > 300) {
-      // ~5s at 60fps with nothing ready — something's actually wrong,
-      // not just a normal brief startup delay.
       sessionStatus.textContent =
         "Camera feed isn't ready. Try stopping and starting again, or reload the page.";
       return;
@@ -172,10 +164,19 @@ function detectFrame() {
   }
   framesWaitedForReadiness = 0;
 
-  const result = faceLandmarker.detectForVideo(video, performance.now());
+  const now = performance.now();
+  const frameDeltaMs = lastFrameTimestamp ? now - lastFrameTimestamp : 0;
+  lastFrameTimestamp = now;
+
+  const result = faceLandmarker.detectForVideo(video, now);
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
 
-  if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+  const faceFound = result.faceLandmarks && result.faceLandmarks.length > 0;
+
+  if (faceFound) {
+    consecutiveNoFaceFrames = 0;
+    faceDetectedDurationMs += frameDeltaMs;
+
     const landmarks = result.faceLandmarks[0];
     const blendshapes = result.faceBlendshapes?.[0]?.categories ?? [];
 
@@ -185,11 +186,15 @@ function detectFrame() {
     drawSimpleOverlay(landmarks);
     sessionStatus.textContent = "Tracking your face — look at the camera and speak naturally.";
   } else {
-    // No face found this frame — don't leave stale numbers on screen
-    // implying tracking is still happening. Blank the metrics and say so.
-    animateValueUpdate(gazeValueEl, "--");
-    animateValueUpdate(postureValueEl, "--");
-    sessionStatus.textContent = "No face detected — please face the camera.";
+    consecutiveNoFaceFrames += 1;
+    // Only flip to the "no face" state after a sustained run of missed
+    // frames, not a single dropped frame — avoids flicker on brief blinks
+    // or momentary detector noise.
+    if (consecutiveNoFaceFrames >= NO_FACE_SUSTAINED_THRESHOLD) {
+      animateValueUpdate(gazeValueEl, "--");
+      animateValueUpdate(postureValueEl, "--");
+      sessionStatus.textContent = "No face detected — please face the camera.";
+    }
   }
 
   rafId = requestAnimationFrame(detectFrame);
@@ -199,9 +204,6 @@ function getBlendshapeScore(categories, name) {
   const found = categories.find((c) => c.categoryName === name);
   return found ? found.score : 0;
 }
-
-const BLINK_MIN_INTERVAL_MS = 350; // real blinks rarely repeat faster than this
-let lastBlinkTimestamp = 0;
 
 function processBlink(blendshapes) {
   const left = getBlendshapeScore(blendshapes, "eyeBlinkLeft");
@@ -222,7 +224,6 @@ function processBlink(blendshapes) {
 }
 
 function processGaze(blendshapes) {
-  // Higher score on any of these = eyes looking away from center.
   const lookAwayNames = [
     "eyeLookInLeft", "eyeLookOutLeft", "eyeLookUpLeft", "eyeLookDownLeft",
     "eyeLookInRight", "eyeLookOutRight", "eyeLookUpRight", "eyeLookDownRight",
@@ -233,14 +234,11 @@ function processGaze(blendshapes) {
   );
   gazeSamples.push(maxDeviation);
 
-  // Show a live rolling gaze indicator
   const recentAvg = average(gazeSamples.slice(-30));
   animateValueUpdate(gazeValueEl, recentAvg < 0.25 ? "Steady" : recentAvg < 0.5 ? "Drifting" : "Away");
 }
 
 function processHeadAngle(landmarks) {
-  // Approximate head yaw/pitch/roll from landmark positions.
-  // Indices: 1 = nose tip, 33 = right eye outer corner, 263 = left eye outer corner.
   const nose = landmarks[1];
   const rightEye = landmarks[33];
   const leftEye = landmarks[263];
@@ -262,9 +260,8 @@ function processHeadAngle(landmarks) {
 }
 
 function drawSimpleOverlay(landmarks) {
-  // Minimal visual: small dots on eyes + nose so the user sees tracking is live.
-  const pointsToDraw = [1, 33, 263, 133, 362]; // nose, eye corners, eye inner corners
-  overlayCtx.fillStyle = "#4f7cff";
+  const pointsToDraw = [1, 33, 263, 133, 362];
+  overlayCtx.fillStyle = "#ff6a1a";
   pointsToDraw.forEach((i) => {
     const p = landmarks[i];
     if (!p) return;
@@ -287,14 +284,19 @@ function variance(arr) {
   return average(arr.map((v) => (v - m) ** 2));
 }
 
-// ---- End session, compute summary, get AI feedback ----
 async function endSession() {
   if (rafId) cancelAnimationFrame(rafId);
   if (timerIntervalId) clearInterval(timerIntervalId);
   if (stream) stream.getTracks().forEach((t) => t.stop());
 
   const durationSec = (performance.now() - sessionStartMs) / 1000;
-  const blinkRatePerMin = durationSec > 0 ? (blinkCount / durationSec) * 60 : 0;
+
+  // Blink rate uses only the time a face was actually detected, not the
+  // full wall-clock session length — a period with the camera blocked
+  // shouldn't silently drag the rate down.
+  const faceDetectedDurationSec = faceDetectedDurationMs / 1000;
+  const blinkRatePerMin =
+    faceDetectedDurationSec > 0 ? (blinkCount / faceDetectedDurationSec) * 60 : 0;
 
   const avgGazeDeviation = average(gazeSamples);
   const gazeStabilityScore = Math.round(Math.max(0, 100 - avgGazeDeviation * 100));
@@ -320,9 +322,6 @@ async function endSession() {
 function showResults(summary) {
   showScreen("results");
 
-  // Composite "Presence Score" — the one hero number, per the redesign.
-  // Blink rate is scored by closeness to a relaxed resting rate (~18/min);
-  // far above or below that (rushed, or barely blinking at all) scores lower.
   const blinkRateScore = Math.max(0, 100 - Math.abs(summary.blinkRatePerMin - 18) * 4);
   const presenceScore = Math.round(
     summary.gazeStabilityScore * 0.4 + summary.postureStabilityScore * 0.35 + blinkRateScore * 0.25
@@ -331,8 +330,6 @@ function showResults(summary) {
   const ringCircumference = 377;
   const ringProgress = document.getElementById("ringProgress");
   ringProgress.style.strokeDashoffset = String(ringCircumference);
-  // Delay so the transition actually animates from full-empty to the score,
-  // rather than snapping straight there.
   requestAnimationFrame(() => {
     setTimeout(() => {
       ringProgress.style.strokeDashoffset = String(
@@ -371,7 +368,6 @@ function resetToLanding() {
   stopBtn.classList.add("hidden");
 }
 
-// ---- Wire up buttons ----
 startBtn.addEventListener("click", startSession);
 stopBtn.addEventListener("click", endSession);
 restartBtn.addEventListener("click", resetToLanding);
