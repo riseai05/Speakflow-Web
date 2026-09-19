@@ -67,8 +67,13 @@ ${isShortSession ? "- This session was very short (under 25 seconds) — explici
 
     if (!geminiRes.ok) {
       console.error("Gemini API error (non-OK status):", JSON.stringify(geminiJson));
+      // Surface the real error text directly in the UI for now, so it's
+      // visible right on the results screen without needing to dig through
+      // dashboard logs. Revert to a friendlier generic message once this
+      // is confirmed working.
+      const rawErrorMsg = geminiJson.error?.message || JSON.stringify(geminiJson).slice(0, 300);
       res.status(200).json({
-        feedback: "Coach feedback isn't available right now, but your session stats above are accurate — try again shortly.",
+        feedback: `[DEBUG] Gemini returned an error: ${rawErrorMsg}`,
       });
       return;
     }
