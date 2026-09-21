@@ -34,6 +34,8 @@ const postureValueEl = document.getElementById("postureValue");
 
 let faceLandmarker = null;
 let stream = null;
+let mediaRecorder = null;
+let audioChunks = [];
 let rafId = null;
 let sessionStartMs = 0;
 let timerIntervalId = null;
@@ -88,14 +90,22 @@ async function startSession() {
   landingError.textContent = "";
   startBtn.disabled = true;
 
+  // Defensive cleanup in case a previous session's stream wasn't fully
+  // torn down (e.g. the tab was interacted with unusually) — never build
+  // a new session on top of stale tracks.
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+  }
+
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { width: 640, height: 480 },
-      audio: false,
+      audio: true,
     });
   } catch (err) {
     landingError.textContent =
-      "Couldn't access your camera. Please allow camera permission and try again.";
+      "Couldn't access your camera/microphone. Please allow permission and try again.";
     startBtn.disabled = false;
     return;
   }
@@ -127,6 +137,16 @@ async function startSession() {
 
   sessionStatus.textContent = "Tracking your face — look at the camera and speak naturally.";
   stopBtn.classList.remove("hidden");
+
+  // Record audio (separate from the video track) for transcription after
+  // the session ends.
+  audioChunks = [];
+  const audioOnlyStream = new MediaStream(stream.getAudioTracks());
+  mediaRecorder = new MediaRecorder(audioOnlyStream);
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) audioChunks.push(e.data);
+  };
+  mediaRecorder.start();
 
   const setOverlaySize = () => {
     overlay.width = video.videoWidth || 640;
@@ -287,13 +307,9 @@ function variance(arr) {
 async function endSession() {
   if (rafId) cancelAnimationFrame(rafId);
   if (timerIntervalId) clearInterval(timerIntervalId);
-  if (stream) stream.getTracks().forEach((t) => t.stop());
 
   const durationSec = (performance.now() - sessionStartMs) / 1000;
 
-  // Blink rate uses only the time a face was actually detected, not the
-  // full wall-clock session length — a period with the camera blocked
-  // shouldn't silently drag the rate down.
   const faceDetectedDurationSec = faceDetectedDurationMs / 1000;
   const blinkRatePerMin =
     faceDetectedDurationSec > 0 ? (blinkCount / faceDetectedDurationSec) * 60 : 0;
@@ -316,7 +332,46 @@ async function endSession() {
   };
 
   showResults(summary);
-  fetchAiFeedback(summary);
+
+  // Stop the audio recorder and wait for its final blob before doing
+  // anything else — stopping tracks too early can cut off the last chunk.
+  const transcript = await stopRecordingAndTranscribe();
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+  }
+
+  fetchAiFeedback({ ...summary, ...transcript });
+}
+
+function stopRecordingAndTranscribe() {
+  return new Promise((resolve) => {
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+      resolve({ transcript: "", noSpeechDetected: true });
+      return;
+    }
+
+    mediaRecorder.onstop = async () => {
+      try {
+        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+        const res = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": mediaRecorder.mimeType },
+          body: audioBlob,
+        });
+        const data = await res.json();
+        resolve({
+          transcript: data.transcript || "",
+          noSpeechDetected: Boolean(data.noSpeechDetected),
+        });
+      } catch (err) {
+        console.warn("Transcription request failed:", err);
+        resolve({ transcript: "", noSpeechDetected: true });
+      }
+    };
+
+    mediaRecorder.stop();
+  });
 }
 
 function showResults(summary) {
@@ -366,6 +421,37 @@ function resetToLanding() {
   showScreen("landing");
   startBtn.disabled = false;
   stopBtn.classList.add("hidden");
+  landingError.textContent = "";
+
+  // Full reset — nothing from the previous session should carry over
+  // visually or in state, even before startSession() runs its own reset.
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+  }
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+  mediaRecorder = null;
+  audioChunks = [];
+
+  video.srcObject = null;
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+
+  blinkCount = 0;
+  eyesCurrentlyClosed = false;
+  lastBlinkTimestamp = 0;
+  gazeSamples = [];
+  headAngleSamples = [];
+  consecutiveNoFaceFrames = 0;
+  faceDetectedDurationMs = 0;
+  lastFrameTimestamp = 0;
+  framesWaitedForReadiness = 0;
+
+  timerValueEl.textContent = "0:00";
+  blinkValueEl.textContent = "0";
+  gazeValueEl.textContent = "--";
+  postureValueEl.textContent = "--";
 }
 
 startBtn.addEventListener("click", startSession);

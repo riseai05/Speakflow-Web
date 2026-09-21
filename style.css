@@ -29,6 +29,7 @@ body {
 }
 
 .screen { width: 100%; max-width: 480px; }
+#session.screen { max-width: 760px; }
 .hidden { display: none !important; }
 
 .screen-inner {
@@ -109,7 +110,9 @@ h2 {
 .video-wrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  height: 78vh;
+  max-height: 820px;
+  min-height: 420px;
   background: #000;
   border-radius: var(--radius-lg);
   overflow: hidden;
