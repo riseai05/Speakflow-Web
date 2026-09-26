@@ -114,6 +114,17 @@ async function startSession() {
   showScreen("session");
   sessionStatus.textContent = "Loading face tracking model…";
 
+  // Diagnostic: if getUserMedia succeeded but somehow granted 0 audio
+  // tracks (denied separately from camera, or a browser quirk), audio
+  // recording will silently produce nothing — surface that immediately
+  // rather than only discovering it after a failed transcription.
+  const audioTrackCount = stream.getAudioTracks().length;
+  console.log(`Audio tracks granted: ${audioTrackCount}`);
+  if (audioTrackCount === 0) {
+    sessionStatus.textContent =
+      "No microphone track was granted — speech won't be transcribed this session. Visual tracking will still work.";
+  }
+
   if (!faceLandmarker) {
     try {
       await loadFaceLandmarker();
